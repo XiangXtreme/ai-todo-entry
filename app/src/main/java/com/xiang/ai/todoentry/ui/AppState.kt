@@ -21,6 +21,7 @@ data class AppUiState(
     val settings: AppSettings = AppSettings(),
     val hasApiKey: Boolean = false,
     val isBusy: Boolean = false,
+    val busyMessage: String? = null,
     val status: String? = null,
     val error: String? = null,
     val showSettings: Boolean = false
@@ -35,8 +36,7 @@ enum class AppTab {
 enum class AppPage {
     MAIN,
     PREVIEW,
-    DETAIL,
-    VOICE
+    DETAIL
 }
 
 data class EditableTask(

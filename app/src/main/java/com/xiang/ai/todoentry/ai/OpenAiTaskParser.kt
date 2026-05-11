@@ -80,12 +80,18 @@ class OpenAiTaskParser(
         return ParsedTask(
             title = cleanTitle,
             body = body?.trim()?.takeIf { it.isNotBlank() },
-            dueDateTime = dueDateTime?.trim()?.takeIf { it.isNotBlank() },
-            reminderDateTime = reminderDateTime?.trim()?.takeIf { it.isNotBlank() },
+            dueDateTime = dueDateTime.normalizeLlmDateTime(),
+            reminderDateTime = reminderDateTime.normalizeLlmDateTime(),
             importance = TaskImportance.from(importance),
             targetListName = targetListName?.trim()?.takeIf { it.isNotBlank() },
             confidence = confidence?.coerceIn(0f, 1f) ?: 0f
         )
+    }
+
+    private fun String?.normalizeLlmDateTime(): String? {
+        val value = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val parsed = runCatching { LocalDateTime.parse(value) }.getOrNull() ?: return value
+        return parsed.format(LLM_DATE_TIME_FORMAT)
     }
 
     private fun extractJson(content: String): String {
@@ -145,6 +151,7 @@ class OpenAiTaskParser(
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
+        private val LLM_DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
 
         private const val SYSTEM_PROMPT_TEMPLATE = """
 You parse natural language into one or more Microsoft To Do tasks.
@@ -156,7 +163,11 @@ Resolve relative dates like today, tomorrow, next week from the current local da
 Use ISO-8601 local date-time strings when dates are explicit or strongly implied.
 Use this exact date-time format: yyyy-MM-ddTHH:mm:ss.
 If the user does not mention a date or time, dueDateTime and reminderDateTime must be null.
-If the user mentions a date but no time, use 00:00:00 for dueDateTime and keep reminderDateTime null.
+Set dueDateTime only when the user expresses a deadline, due date, target completion date, or words like due, deadline, by, before, complete by, 截止, 到期, 期限, 之前完成.
+Set reminderDateTime only when the user asks to be reminded or notified, using words like remind me, reminder, notify, 提醒我, 提醒, 通知我.
+Reminder-only requests must not set dueDateTime. A reminder timestamp alone is not a due date.
+If the user mentions a date but no time for a due date, use 00:00:00 for dueDateTime and keep reminderDateTime null.
+If the user mentions a date but no time for a reminder, use 09:00:00 for reminderDateTime and keep dueDateTime null.
 Never invent default times such as 18:00.
 Do not include timezone offsets such as Z or +08:00 in dueDateTime or reminderDateTime.
 importance must be one of low, normal, high.

@@ -3,10 +3,6 @@ package com.xiang.ai.todoentry.ui
 import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import android.content.Intent
-import android.speech.RecognizerIntent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,6 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -79,7 +76,6 @@ import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
-import java.util.Locale
 
 private val Ink = Color(0xFF101936)
 private val Muted = Color(0xFF6F7890)
@@ -117,14 +113,6 @@ fun TodoEntryApp(viewModel: MainViewModel, activity: Activity) {
                 onChanged = viewModel::updateTaskDetail,
                 onSave = viewModel::saveTaskDetail,
                 onToggleComplete = viewModel::toggleSelectedTaskCompletion,
-                snackbarHostState = snackbarHostState
-            )
-            AppPage.VOICE -> VoicePage(
-                onBack = viewModel::closePage,
-                onText = {
-                    viewModel.updateInput(it)
-                    viewModel.closePage()
-                },
                 snackbarHostState = snackbarHostState
             )
             AppPage.MAIN -> MainShell(
@@ -177,7 +165,6 @@ private fun MainShell(
                 onInputChange = viewModel::updateInput,
                 onUseExample = viewModel::useExample,
                 onParse = viewModel::parseInput,
-                onVoice = viewModel::openVoiceInput,
                 onOpenAll = { viewModel.selectTab(AppTab.TASKS) },
                 onOpenSettings = { viewModel.selectTab(AppTab.PROFILE) }
             )
@@ -197,7 +184,8 @@ private fun MainShell(
                 onSignIn = { viewModel.signIn(activity) },
                 onSignOut = viewModel::signOut,
                 onSave = viewModel::saveSettings,
-                onClearApiKey = viewModel::clearApiKey
+                onClearApiKey = viewModel::clearApiKey,
+                onTestAi = viewModel::testAiConnectivity
             )
         }
     }
@@ -210,44 +198,34 @@ private fun HomePage(
     onInputChange: (String) -> Unit,
     onUseExample: (String) -> Unit,
     onParse: () -> Unit,
-    onVoice: () -> Unit,
     onOpenAll: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    Box(Modifier.fillMaxSize().padding(padding)) {
-        Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            HomeHeader(accountName = state.accountName, onSettings = onOpenSettings)
-            AiInputCard(
-                input = state.input,
-                isBusy = state.isBusy,
-                onInputChange = onInputChange,
-                onUseExample = onUseExample,
-                onParse = onParse,
-                onVoice = onVoice
-            )
-            RecentTasksSection(
-                tasks = state.tasks.take(4),
-                onOpenAll = onOpenAll
-            )
-        }
-        FloatingAddButton(Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 18.dp), onClick = onParse)
+    Column(
+        modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(22.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        HomeHeader(onSettings = onOpenSettings)
+        AiInputCard(
+            input = state.input,
+            isBusy = state.isBusy,
+            busyMessage = state.busyMessage,
+            onInputChange = onInputChange,
+            onUseExample = onUseExample,
+            onParse = onParse
+        )
+        RecentTasksSection(
+            tasks = state.tasks.take(4),
+            onOpenAll = onOpenAll
+        )
     }
 }
 
 @Composable
-private fun HomeHeader(accountName: String?, onSettings: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("AI ToDo", color = Ink, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            IconTextButton("⚙", onSettings)
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("早上好！👋", color = Ink, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(if (accountName == null) "登录后同步到 Microsoft To Do" else "今天也要高效完成任务哦", color = Muted)
-        }
+private fun HomeHeader(onSettings: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text("AI ToDo", color = Ink, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        IconTextButton("⚙", onSettings)
     }
 }
 
@@ -255,25 +233,21 @@ private fun HomeHeader(accountName: String?, onSettings: () -> Unit) {
 private fun AiInputCard(
     input: String,
     isBusy: Boolean,
+    busyMessage: String?,
     onInputChange: (String) -> Unit,
     onUseExample: (String) -> Unit,
-    onParse: () -> Unit,
-    onVoice: () -> Unit
+    onParse: () -> Unit
 ) {
     ElevatedPanel {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = onInputChange,
-                    modifier = Modifier.weight(1f).height(80.dp),
-                    placeholder = { Text("用自然语言描述你要做的事...") },
-                    minLines = 2,
-                    shape = RoundedCornerShape(14.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                IconTextButton("🎙", onVoice)
-            }
+            OutlinedTextField(
+                value = input,
+                onValueChange = onInputChange,
+                modifier = Modifier.fillMaxWidth().height(96.dp),
+                placeholder = { Text("用自然语言描述你要做的事...") },
+                minLines = 3,
+                shape = RoundedCornerShape(14.dp)
+            )
             Column(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SoftPanel).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -282,7 +256,37 @@ private fun AiInputCard(
                 ExampleRow("明天下午3点开会，准备PPT", onUseExample)
                 ExampleRow("周末去超市买菜，记得带雨伞", onUseExample)
             }
-            GradientButton(text = "✦  AI 生成任务", enabled = !isBusy && input.isNotBlank(), onClick = onParse)
+            if (isBusy && busyMessage != null) {
+                GenerationStatus(message = busyMessage)
+            }
+            GradientButton(
+                text = if (isBusy) "AI 正在生成..." else "✦  AI 生成任务",
+                enabled = !isBusy && input.isNotBlank(),
+                onClick = onParse
+            )
+        }
+    }
+}
+
+@Composable
+private fun GenerationStatus(message: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFEFF4FF))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+            strokeWidth = 2.dp,
+            color = Blue
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(message, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Text("正在调用 AI 并整理成 Microsoft To Do 任务", color = Muted, fontSize = 12.sp)
         }
     }
 }
@@ -589,57 +593,14 @@ private fun DetailNotesCard(detail: EditableTaskDetail, onChanged: (EditableTask
 }
 
 @Composable
-private fun VoicePage(onBack: () -> Unit, onText: (String) -> Unit, snackbarHostState: SnackbarHostState) {
-    val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        if (!text.isNullOrBlank()) onText(text)
-    }
-    Scaffold(
-        containerColor = Color(0xFFF8FAFF),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = { SimpleTopBar("语音输入", onBack) }
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(28.dp)) {
-            Text("你可以这样说：", color = Ink, modifier = Modifier.align(Alignment.Start))
-            Column(Modifier.align(Alignment.Start), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Tag("明天早上9点开会", WorkTag)
-                Tag("周六去超市买菜", WorkTag)
-                Tag("每周三提醒我健身", WorkTag)
-            }
-            Spacer(Modifier.height(40.dp))
-            Box(contentAlignment = Alignment.Center) {
-                repeat(3) { index ->
-                    Box(Modifier.size((190 - index * 42).dp).clip(CircleShape).background(Purple.copy(alpha = 0.08f + index * 0.05f)))
-                }
-                Box(
-                    Modifier.size(92.dp).clip(CircleShape).background(Brush.verticalGradient(listOf(Color(0xFF8F7BFF), Purple))).clickable {
-                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                            putExtra(RecognizerIntent.EXTRA_PROMPT, "说出要创建的任务")
-                        }
-                        launcher.launch(intent)
-                    },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("🎙", fontSize = 38.sp, color = Color.White)
-                }
-            }
-            Text("正在聆听...", color = Ink, fontWeight = FontWeight.Bold)
-            Text("松开结束", color = Muted, fontSize = 12.sp)
-        }
-    }
-}
-
-@Composable
 private fun SettingsPage(
     state: AppUiState,
     padding: PaddingValues,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onSave: (String, String, String?, String?, Boolean) -> Unit,
-    onClearApiKey: () -> Unit
+    onClearApiKey: () -> Unit,
+    onTestAi: (String, String, String?) -> Unit
 ) {
     var baseUrl by remember(state.settings.llmBaseUrl) { mutableStateOf(state.settings.llmBaseUrl) }
     var model by remember(state.settings.llmModel) { mutableStateOf(state.settings.llmModel) }
@@ -677,6 +638,13 @@ private fun SettingsPage(
                 OutlinedTextField(model, { model = it }, Modifier.fillMaxWidth(), label = { Text("Model") }, singleLine = true)
                 OutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text(if (state.hasApiKey) "替换 API Key" else "API Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
                 SettingSwitch("跳过创建确认", skipConfirmation, onCheckedChange = { skipConfirmation = it })
+                OutlinedButton(
+                    onClick = { onTestAi(baseUrl, model, apiKey.ifBlank { null }) },
+                    enabled = !state.isBusy && (apiKey.isNotBlank() || state.hasApiKey),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (state.busyMessage == "正在测试 AI 连通性...") "正在测试..." else "测试 AI 连通性")
+                }
                 GradientButton("保存设置", enabled = !state.isBusy, onClick = {
                     onSave(
                         baseUrl,

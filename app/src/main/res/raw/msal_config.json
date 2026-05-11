@@ -2,7 +2,8 @@
   "client_id": "3c39bed4-4f1d-4bee-80d9-88e1e755a3fe",
   "redirect_uri": "msauth://com.xiang.ai.todoentry/qV0%2FA8%2F%2BmsShY34XnYWVjyxmqZs%3D",
   "account_mode": "SINGLE",
-  "authorization_user_agent": "DEFAULT",
+  "authorization_user_agent": "WEBVIEW",
+  "broker_redirect_uri_registered": false,
   "authorities": [
     {
       "type": "AAD",

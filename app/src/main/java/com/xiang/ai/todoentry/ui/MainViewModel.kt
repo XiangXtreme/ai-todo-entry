@@ -85,6 +85,9 @@ class MainViewModel(
 
     fun selectTab(tab: AppTab) {
         _uiState.update { it.copy(currentTab = tab, currentPage = AppPage.MAIN, error = null, status = null) }
+        if (tab == AppTab.TASKS && _uiState.value.accountName != null && _uiState.value.selectedListId != null) {
+            refreshTasks(silent = true)
+        }
     }
 
     fun openTaskTab() {
@@ -97,10 +100,6 @@ class MainViewModel(
 
     fun openProfileTab() {
         selectTab(AppTab.PROFILE)
-    }
-
-    fun openVoiceInput() {
-        _uiState.update { it.copy(currentPage = AppPage.VOICE, error = null, status = null) }
     }
 
     fun closePage() {
@@ -116,7 +115,7 @@ class MainViewModel(
     }
 
     fun parseInput() {
-        runBusy {
+        runBusy("AI 正在生成任务...") {
             val current = _uiState.value
             val input = current.input.trim()
             require(input.isNotBlank()) { "Describe the task first" }
@@ -209,12 +208,12 @@ class MainViewModel(
         }
     }
 
-    fun refreshTasks() {
+    fun refreshTasks(silent: Boolean = false) {
         runBusy {
             val listId = _uiState.value.selectedListId ?: throw IllegalStateException("Select a To Do list first")
             val token = authRepository.acquireTokenSilent()
             val tasks = graphClient.getTasks(token, listId).sortedForTodoDisplay()
-            _uiState.update { it.copy(tasks = tasks, status = "Tasks refreshed") }
+            _uiState.update { it.copy(tasks = tasks, status = if (silent) null else "Tasks refreshed") }
         }
     }
 
@@ -379,6 +378,23 @@ class MainViewModel(
         _uiState.update { it.copy(hasApiKey = false, status = "API key cleared") }
     }
 
+    fun testAiConnectivity(baseUrl: String, model: String, apiKeyInput: String?) {
+        runBusy("正在测试 AI 连通性...") {
+            val apiKey = apiKeyInput?.takeIf { it.isNotBlank() }
+                ?: settingsRepository.getApiKey()
+                ?: throw IllegalStateException("Configure your LLM API key first")
+            val settings = _uiState.value.settings.copy(
+                llmBaseUrl = baseUrl.trim().ifBlank { AppSettings().llmBaseUrl },
+                llmModel = model.trim().ifBlank { AppSettings().llmModel }
+            )
+            val parsed = taskParser.parse("明天下午三点提醒我买牛奶", settings, apiKey)
+            parsed.tasks.firstOrNull() ?: throw IllegalStateException("AI did not return a valid task")
+            _uiState.update {
+                it.copy(status = "AI 连通性正常，返回格式符合预期")
+            }
+        }
+    }
+
     private suspend fun refreshListsInternal() {
         val token = authRepository.acquireTokenSilent()
         val lists = graphClient.getLists(token)
@@ -402,14 +418,14 @@ class MainViewModel(
             ?: lists.firstOrNull()
     }
 
-    private fun runBusy(block: suspend () -> Unit) {
+    private fun runBusy(message: String? = null, block: suspend () -> Unit) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isBusy = true, error = null, status = null) }
+            _uiState.update { it.copy(isBusy = true, busyMessage = message, error = null, status = null) }
             runCatching { block() }
                 .onFailure { throwable ->
                     _uiState.update { it.copy(error = throwable.toUserMessage()) }
                 }
-            _uiState.update { it.copy(isBusy = false) }
+            _uiState.update { it.copy(isBusy = false, busyMessage = null) }
         }
     }
 
@@ -433,6 +449,7 @@ class MainViewModel(
             return MainViewModel(authRepository, settingsRepository, appContext.applicationContext) as T
         }
     }
+
 }
 
 private fun List<TodoTaskDto>.sortedForTodoDisplay(): List<TodoTaskDto> =
