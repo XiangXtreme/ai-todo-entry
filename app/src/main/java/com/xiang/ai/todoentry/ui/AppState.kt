@@ -9,6 +9,7 @@ import com.xiang.ai.todoentry.settings.AppSettings
 data class AppUiState(
     val input: String = "",
     val currentTab: AppTab = AppTab.HOME,
+    val currentPage: AppPage = AppPage.MAIN,
     val previewTasks: List<EditableTask> = emptyList(),
     val selectedTask: EditableTaskDetail? = null,
     val lastCreatedTitle: String? = null,
@@ -29,6 +30,13 @@ enum class AppTab {
     HOME,
     TASKS,
     PROFILE
+}
+
+enum class AppPage {
+    MAIN,
+    PREVIEW,
+    DETAIL,
+    VOICE
 }
 
 data class EditableTask(

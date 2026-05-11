@@ -84,7 +84,27 @@ class MainViewModel(
     }
 
     fun selectTab(tab: AppTab) {
-        _uiState.update { it.copy(currentTab = tab, error = null, status = null) }
+        _uiState.update { it.copy(currentTab = tab, currentPage = AppPage.MAIN, error = null, status = null) }
+    }
+
+    fun openTaskTab() {
+        selectTab(AppTab.TASKS)
+    }
+
+    fun openHomeTab() {
+        selectTab(AppTab.HOME)
+    }
+
+    fun openProfileTab() {
+        selectTab(AppTab.PROFILE)
+    }
+
+    fun openVoiceInput() {
+        _uiState.update { it.copy(currentPage = AppPage.VOICE, error = null, status = null) }
+    }
+
+    fun closePage() {
+        _uiState.update { it.copy(currentPage = AppPage.MAIN, error = null, status = null) }
     }
 
     fun updateInput(value: String) {
@@ -113,6 +133,7 @@ class MainViewModel(
                     previewTasks = parsed.tasks.map(EditableTask::from),
                     selectedListId = selectedList?.id ?: it.selectedListId,
                     currentTab = AppTab.HOME,
+                    currentPage = AppPage.PREVIEW,
                     status = "Parsed ${parsed.tasks.size} task(s). Review before creating."
                 )
             }
@@ -182,6 +203,7 @@ class MainViewModel(
                     lastCreatedTitle = created.lastOrNull()?.title,
                     lastCreatedListName = listName,
                     currentTab = AppTab.TASKS,
+                    currentPage = AppPage.MAIN,
                     status = "Created ${created.size} task(s) in $listName"
                 )
             }
@@ -243,12 +265,38 @@ class MainViewModel(
 
     fun openTaskDetail(task: TodoTaskDto) {
         _uiState.update {
-            it.copy(selectedTask = EditableTaskDetail.from(task), currentTab = AppTab.TASKS, error = null, status = null)
+            it.copy(
+                selectedTask = EditableTaskDetail.from(task),
+                currentTab = AppTab.TASKS,
+                currentPage = AppPage.DETAIL,
+                error = null,
+                status = null
+            )
+        }
+    }
+
+    fun openTaskDetailById(taskId: String) {
+        val task = _uiState.value.tasks.firstOrNull { it.id == taskId }
+        if (task != null) {
+            openTaskDetail(task)
+            return
+        }
+        runBusy {
+            val listId = _uiState.value.selectedListId ?: throw IllegalStateException("Select a To Do list first")
+            val token = authRepository.acquireTokenSilent()
+            val loaded = graphClient.getTask(token, listId, taskId)
+            _uiState.update {
+                it.copy(
+                    selectedTask = EditableTaskDetail.from(loaded),
+                    currentTab = AppTab.TASKS,
+                    currentPage = AppPage.DETAIL
+                )
+            }
         }
     }
 
     fun closeTaskDetail() {
-        _uiState.update { it.copy(selectedTask = null, error = null, status = null) }
+        _uiState.update { it.copy(selectedTask = null, currentPage = AppPage.MAIN, error = null, status = null) }
     }
 
     fun updateTaskDetail(detail: EditableTaskDetail) {
@@ -297,7 +345,15 @@ class MainViewModel(
     }
 
     fun showSettings(show: Boolean) {
-        _uiState.update { it.copy(showSettings = show, error = null, status = null, currentTab = if (show) AppTab.PROFILE else it.currentTab) }
+        _uiState.update {
+            it.copy(
+                showSettings = show,
+                error = null,
+                status = null,
+                currentTab = if (show) AppTab.PROFILE else it.currentTab,
+                currentPage = AppPage.MAIN
+            )
+        }
     }
 
     fun saveSettings(baseUrl: String, model: String, defaultListId: String?, apiKey: String?) {

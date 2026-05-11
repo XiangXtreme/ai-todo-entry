@@ -29,5 +29,33 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+        handleWidgetIntent()
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleWidgetIntent()
+    }
+
+    private fun handleWidgetIntent() {
+        when (intent?.getStringExtra(EXTRA_OPEN)) {
+            OPEN_AI -> viewModel.openHomeTab()
+            OPEN_TASKS -> viewModel.openTaskTab()
+            OPEN_PROFILE -> viewModel.openProfileTab()
+            OPEN_DETAIL -> {
+                viewModel.openTaskTab()
+                intent?.getStringExtra(EXTRA_TASK_ID)?.takeIf { it.isNotBlank() }?.let(viewModel::openTaskDetailById)
+            }
+        }
+    }
+
+    companion object {
+        const val EXTRA_OPEN = "extra_open"
+        const val EXTRA_TASK_ID = "extra_task_id"
+        const val OPEN_AI = "ai"
+        const val OPEN_TASKS = "tasks"
+        const val OPEN_PROFILE = "profile"
+        const val OPEN_DETAIL = "detail"
     }
 }

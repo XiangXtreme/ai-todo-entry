@@ -155,6 +155,9 @@ Current local date-time is {{CURRENT_LOCAL_DATETIME}} in {{CURRENT_TIME_ZONE}}.
 Resolve relative dates like today, tomorrow, next week from the current local date-time.
 Use ISO-8601 local date-time strings when dates are explicit or strongly implied.
 Use this exact date-time format: yyyy-MM-ddTHH:mm:ss.
+If the user does not mention a date or time, dueDateTime and reminderDateTime must be null.
+If the user mentions a date but no time, use 00:00:00 for dueDateTime and keep reminderDateTime null.
+Never invent default times such as 18:00.
 Do not include timezone offsets such as Z or +08:00 in dueDateTime or reminderDateTime.
 importance must be one of low, normal, high.
 Split clearly separate requests into separate tasks.

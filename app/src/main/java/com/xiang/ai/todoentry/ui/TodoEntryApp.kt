@@ -1,29 +1,42 @@
 package com.xiang.ai.todoentry.ui
 
 import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -32,6 +45,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -44,13 +59,34 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.xiang.ai.todoentry.ai.TaskImportance
 import com.xiang.ai.todoentry.graph.TodoListDto
 import com.xiang.ai.todoentry.graph.TodoTaskDto
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private val Ink = Color(0xFF101936)
+private val Muted = Color(0xFF6F7890)
+private val Panel = Color.White
+private val SoftPanel = Color(0xFFF5F6FF)
+private val Line = Color(0xFFE7EAF4)
+private val Purple = Color(0xFF6257FF)
+private val Blue = Color(0xFF4169FF)
+private val WorkTag = Color(0xFFEDEBFF)
+private val LifeTag = Color(0xFFE8F2FF)
 
 @Composable
 fun TodoEntryApp(viewModel: MainViewModel, activity: Activity) {
@@ -62,195 +98,443 @@ fun TodoEntryApp(viewModel: MainViewModel, activity: Activity) {
         state.status?.let { snackbarHostState.showSnackbar(it) }
     }
 
+    Surface(color = Color(0xFFF8FAFF)) {
+        when (state.currentPage) {
+            AppPage.PREVIEW -> PreviewPage(
+                state = state,
+                onBack = viewModel::closePage,
+                onDraftChanged = viewModel::updateDraft,
+                onRemoveDraft = viewModel::removeDraft,
+                onCreate = viewModel::createPreviewTasks,
+                snackbarHostState = snackbarHostState
+            )
+            AppPage.DETAIL -> DetailPage(
+                state = state,
+                onBack = viewModel::closeTaskDetail,
+                onChanged = viewModel::updateTaskDetail,
+                onSave = viewModel::saveTaskDetail,
+                onToggleComplete = viewModel::toggleSelectedTaskCompletion,
+                snackbarHostState = snackbarHostState
+            )
+            AppPage.VOICE -> VoicePage(
+                onBack = viewModel::closePage,
+                onText = {
+                    viewModel.updateInput(it)
+                    viewModel.closePage()
+                },
+                snackbarHostState = snackbarHostState
+            )
+            AppPage.MAIN -> MainShell(
+                state = state,
+                activity = activity,
+                snackbarHostState = snackbarHostState,
+                viewModel = viewModel
+            )
+        }
+    }
+}
+
+@Composable
+private fun MainShell(
+    state: AppUiState,
+    activity: Activity,
+    snackbarHostState: SnackbarHostState,
+    viewModel: MainViewModel
+) {
     Scaffold(
-        topBar = { AppTopBar(state) },
+        containerColor = Color(0xFFF8FAFF),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(containerColor = Color.White) {
                 NavigationBarItem(
                     selected = state.currentTab == AppTab.HOME,
                     onClick = { viewModel.selectTab(AppTab.HOME) },
-                    icon = { Text("AI") },
+                    icon = { Text("⌂", fontSize = 20.sp) },
                     label = { Text("首页") }
                 )
                 NavigationBarItem(
                     selected = state.currentTab == AppTab.TASKS,
                     onClick = { viewModel.selectTab(AppTab.TASKS) },
-                    icon = { Text("✓") },
+                    icon = { Text("✓", fontSize = 18.sp) },
                     label = { Text("任务") }
                 )
                 NavigationBarItem(
                     selected = state.currentTab == AppTab.PROFILE,
                     onClick = { viewModel.selectTab(AppTab.PROFILE) },
-                    icon = { Text("我") },
+                    icon = { Text("♡", fontSize = 18.sp) },
                     label = { Text("我的") }
                 )
             }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        }
     ) { padding ->
         when (state.currentTab) {
-            AppTab.HOME -> HomeScreen(
+            AppTab.HOME -> HomePage(
                 state = state,
-                modifier = Modifier.padding(padding),
+                padding = padding,
                 onInputChange = viewModel::updateInput,
                 onUseExample = viewModel::useExample,
                 onParse = viewModel::parseInput,
-                onOpenProfile = { viewModel.selectTab(AppTab.PROFILE) },
-                onSignIn = { viewModel.signIn(activity) },
-                onDraftChanged = viewModel::updateDraft,
-                onRemoveDraft = viewModel::removeDraft,
-                onCreate = viewModel::createPreviewTasks
+                onVoice = viewModel::openVoiceInput,
+                onOpenAll = { viewModel.selectTab(AppTab.TASKS) },
+                onOpenSettings = { viewModel.selectTab(AppTab.PROFILE) }
             )
-            AppTab.TASKS -> TasksScreen(
+            AppTab.TASKS -> TaskListPage(
                 state = state,
-                modifier = Modifier.padding(padding),
+                padding = padding,
                 onSelectedList = viewModel::selectList,
                 onRefresh = viewModel::refreshTasks,
                 onToggleComplete = viewModel::toggleTaskCompletion,
                 onDelete = viewModel::deleteTask,
                 onOpenDetail = viewModel::openTaskDetail,
-                onCloseDetail = viewModel::closeTaskDetail,
-                onDetailChanged = viewModel::updateTaskDetail,
-                onSaveDetail = viewModel::saveTaskDetail,
-                onToggleDetail = viewModel::toggleSelectedTaskCompletion
+                onAdd = { viewModel.selectTab(AppTab.HOME) }
             )
-            AppTab.PROFILE -> ProfileScreen(
+            AppTab.PROFILE -> SettingsPage(
                 state = state,
-                modifier = Modifier.padding(padding),
+                padding = padding,
                 onSignIn = { viewModel.signIn(activity) },
                 onSignOut = viewModel::signOut,
                 onSave = viewModel::saveSettings,
                 onClearApiKey = viewModel::clearApiKey
             )
         }
-
-        if (state.showSettings) {
-            viewModel.selectTab(AppTab.PROFILE)
-            viewModel.showSettings(false)
-        }
     }
 }
 
 @Composable
-private fun HomeScreen(
+private fun HomePage(
     state: AppUiState,
-    modifier: Modifier,
+    padding: PaddingValues,
     onInputChange: (String) -> Unit,
     onUseExample: (String) -> Unit,
     onParse: () -> Unit,
-    onOpenProfile: () -> Unit,
-    onSignIn: () -> Unit,
-    onDraftChanged: (Int, EditableTask) -> Unit,
-    onRemoveDraft: (Int) -> Unit,
-    onCreate: () -> Unit
+    onVoice: () -> Unit,
+    onOpenAll: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
-    Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        if (state.accountName == null) {
-            NoticeCard("需要 Microsoft 登录", "登录后才能读取列表并创建 To Do 任务。") {
-                TextButton(onClick = onSignIn) { Text("登录") }
-            }
-        }
-        if (!state.hasApiKey) {
-            NoticeCard("需要 LLM API Key", "请在“我的”中配置 DeepSeek 或 OpenAI-compatible 服务。") {
-                TextButton(onClick = onOpenProfile) { Text("去配置") }
-            }
-        }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("AI 快速添加", style = MaterialTheme.typography.headlineSmall)
-                OutlinedTextField(
-                    value = state.input,
-                    onValueChange = onInputChange,
-                    modifier = Modifier.fillMaxWidth().height(150.dp),
-                    placeholder = { Text("例如：明天下午三点提醒我买牛奶，周五提交报告") },
-                    minLines = 4
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("明天下午三点提醒我买牛奶", "周五下班前提交周报", "今晚八点整理旅行清单").forEach { example ->
-                        AssistChip(onClick = { onUseExample(example) }, label = { Text(example) })
-                    }
-                }
-                Button(
-                    onClick = onParse,
-                    enabled = !state.isBusy && state.input.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("AI 解析任务")
-                }
-            }
-        }
-        state.lastCreatedTitle?.let {
-            NoticeCard("最近创建", "$it 已创建到 ${state.lastCreatedListName ?: "Microsoft To Do"}。") {}
-        }
-        if (state.previewTasks.isNotEmpty()) {
-            PreviewTasksCard(
-                tasks = state.previewTasks,
+    Box(Modifier.fillMaxSize().padding(padding)) {
+        Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            HomeHeader(accountName = state.accountName, onSettings = onOpenSettings)
+            AiInputCard(
+                input = state.input,
                 isBusy = state.isBusy,
-                onTaskChanged = onDraftChanged,
-                onRemove = onRemoveDraft,
-                onCreate = onCreate
+                onInputChange = onInputChange,
+                onUseExample = onUseExample,
+                onParse = onParse,
+                onVoice = onVoice
+            )
+            RecentTasksSection(
+                tasks = state.tasks.take(4),
+                onOpenAll = onOpenAll
             )
         }
-        BusyRow(state.isBusy)
+        FloatingAddButton(Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 18.dp), onClick = onParse)
     }
 }
 
 @Composable
-private fun TasksScreen(
+private fun HomeHeader(accountName: String?, onSettings: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("AI ToDo", color = Ink, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            IconTextButton("⚙", onSettings)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("早上好！👋", color = Ink, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(if (accountName == null) "登录后同步到 Microsoft To Do" else "今天也要高效完成任务哦", color = Muted)
+        }
+    }
+}
+
+@Composable
+private fun AiInputCard(
+    input: String,
+    isBusy: Boolean,
+    onInputChange: (String) -> Unit,
+    onUseExample: (String) -> Unit,
+    onParse: () -> Unit,
+    onVoice: () -> Unit
+) {
+    ElevatedPanel {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = onInputChange,
+                    modifier = Modifier.weight(1f).height(80.dp),
+                    placeholder = { Text("用自然语言描述你要做的事...") },
+                    minLines = 2,
+                    shape = RoundedCornerShape(14.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                IconTextButton("🎙", onVoice)
+            }
+            Column(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SoftPanel).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("示例：", color = Blue, fontSize = 13.sp)
+                ExampleRow("明天下午3点开会，准备PPT", onUseExample)
+                ExampleRow("周末去超市买菜，记得带雨伞", onUseExample)
+            }
+            GradientButton(text = "✦  AI 生成任务", enabled = !isBusy && input.isNotBlank(), onClick = onParse)
+        }
+    }
+}
+
+@Composable
+private fun ExampleRow(text: String, onUseExample: (String) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp)).clickable { onUseExample(text) }.padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text, color = Blue, fontSize = 14.sp)
+        Text("›", color = Blue, fontSize = 22.sp)
+    }
+}
+
+@Composable
+private fun RecentTasksSection(tasks: List<TodoTaskDto>, onOpenAll: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("最近创建", color = Ink, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onOpenAll) { Text("查看全部  ›") }
+        }
+        ElevatedPanel(contentPadding = PaddingValues(0.dp)) {
+            if (tasks.isEmpty()) {
+                Text("暂无任务", color = Muted, modifier = Modifier.padding(18.dp))
+            } else {
+                Column {
+                    tasks.forEachIndexed { index, task ->
+                        HomeTaskRow(task)
+                        if (index != tasks.lastIndex) DividerLine()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeTaskRow(task: TodoTaskDto) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+        CompletionCircle(completed = task.status == "completed")
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(task.title, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            TaskTimeText(task.dueDateTime?.dateTime)
+        }
+        Tag(if (task.importance == "high") "工作" else "生活", if (task.importance == "high") WorkTag else LifeTag)
+    }
+}
+
+@Composable
+private fun TaskTimeText(dateTime: String?) {
+    dateTime.toDisplayDateTime()?.let {
+        Text("▣ $it", color = Muted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun PreviewPage(
     state: AppUiState,
-    modifier: Modifier,
+    onBack: () -> Unit,
+    onDraftChanged: (Int, EditableTask) -> Unit,
+    onRemoveDraft: (Int) -> Unit,
+    onCreate: () -> Unit,
+    snackbarHostState: SnackbarHostState
+) {
+    Scaffold(
+        containerColor = Color(0xFFF8FAFF),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = { SimpleTopBar("任务解析预览", onBack) }
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            GradientBubble(state.input.ifBlank { "AI 已生成任务" })
+            Text("AI 已为你生成以下任务：", color = Muted)
+            ElevatedPanel {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    state.previewTasks.forEachIndexed { index, task ->
+                        PreviewTaskItem(index, task, onDraftChanged, onRemoveDraft)
+                    }
+                    TextButton(onClick = { }) { Text("+ 添加子任务") }
+                }
+            }
+            GradientButton("确认创建 (${state.previewTasks.size})", enabled = !state.isBusy && state.previewTasks.isNotEmpty(), onClick = onCreate)
+            TextButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("重新编辑") }
+        }
+    }
+}
+
+@Composable
+private fun PreviewTaskItem(index: Int, task: EditableTask, onDraftChanged: (Int, EditableTask) -> Unit, onRemoveDraft: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White).border(1.dp, Line, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                OutlinedTextField(task.title, { onDraftChanged(index, task.copy(title = it)) }, Modifier.fillMaxWidth(), label = { Text("标题") }, singleLine = true)
+                OutlinedTextField(task.body, { onDraftChanged(index, task.copy(body = it)) }, Modifier.fillMaxWidth(), label = { Text("描述") }, minLines = 2)
+            }
+            TextButton(onClick = { onRemoveDraft(index) }) { Text("移除") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            task.dueDateTime.toDisplayDateTime()?.let { Tag(it, SoftPanel) }
+            Tag(task.importance.label(), SoftPanel)
+        }
+    }
+}
+
+@Composable
+private fun TaskListPage(
+    state: AppUiState,
+    padding: PaddingValues,
     onSelectedList: (String) -> Unit,
     onRefresh: () -> Unit,
     onToggleComplete: (TodoTaskDto) -> Unit,
     onDelete: (TodoTaskDto) -> Unit,
     onOpenDetail: (TodoTaskDto) -> Unit,
-    onCloseDetail: () -> Unit,
-    onDetailChanged: (EditableTaskDetail) -> Unit,
-    onSaveDetail: () -> Unit,
-    onToggleDetail: () -> Unit
+    onAdd: () -> Unit
 ) {
-    Row(modifier = modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            ListPicker(state.lists, state.selectedListId, onSelectedList)
+    Box(Modifier.fillMaxSize().padding(padding)) {
+        Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("任务列表", style = MaterialTheme.typography.titleLarge)
-                OutlinedButton(onClick = onRefresh, enabled = state.accountName != null && state.selectedListId != null && !state.isBusy) {
-                    Text("刷新")
-                }
+                Text("任务", color = Ink, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                OutlinedButton(onClick = onRefresh, enabled = !state.isBusy && state.accountName != null) { Text("刷新") }
             }
+            ListPicker(state.lists, state.selectedListId, onSelectedList)
             if (state.accountName == null) {
-                Text("登录后查看 Microsoft To Do。")
-            } else if (state.tasks.isEmpty()) {
-                Text("当前列表没有任务。")
+                ElevatedPanel { Text("请先在“我的”页面登录 Microsoft 账号。", color = Muted) }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(state.tasks, key = { it.id ?: it.title }) { task ->
-                        TaskRow(task, state.isBusy, onOpenDetail, onToggleComplete, onDelete)
+                        FullTaskRow(task, state.isBusy, onOpenDetail, onToggleComplete, onDelete)
                     }
                 }
             }
         }
-        state.selectedTask?.let { detail ->
-            TaskDetailPanel(
-                detail = detail,
-                isBusy = state.isBusy,
-                modifier = Modifier.weight(1f),
-                onClose = onCloseDetail,
-                onChanged = onDetailChanged,
-                onSave = onSaveDetail,
-                onToggleComplete = onToggleDetail
-            )
+        FloatingAddButton(Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 18.dp), onClick = onAdd)
+    }
+}
+
+@Composable
+private fun FullTaskRow(task: TodoTaskDto, isBusy: Boolean, onOpenDetail: (TodoTaskDto) -> Unit, onToggleComplete: (TodoTaskDto) -> Unit, onDelete: (TodoTaskDto) -> Unit) {
+    ElevatedPanel(contentPadding = PaddingValues(14.dp)) {
+        Row(Modifier.fillMaxWidth().clickable { onOpenDetail(task) }, verticalAlignment = Alignment.CenterVertically) {
+            CompletionCircle(task.status == "completed", Modifier.clickable(enabled = !isBusy) { onToggleComplete(task) })
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(task.title, color = Ink, fontWeight = FontWeight.SemiBold, textDecoration = if (task.status == "completed") TextDecoration.LineThrough else TextDecoration.None)
+                TaskTimeText(task.dueDateTime?.dateTime)
+            }
+            TextButton(onClick = { onDelete(task) }, enabled = !isBusy) { Text("删除") }
         }
     }
 }
 
 @Composable
-private fun ProfileScreen(
+private fun DetailPage(
     state: AppUiState,
-    modifier: Modifier,
+    onBack: () -> Unit,
+    onChanged: (EditableTaskDetail) -> Unit,
+    onSave: () -> Unit,
+    onToggleComplete: () -> Unit,
+    snackbarHostState: SnackbarHostState
+) {
+    val detail = state.selectedTask
+    Scaffold(
+        containerColor = Color(0xFFF8FAFF),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = { SimpleTopBar("", onBack, trailing = "⋮") }
+    ) { padding ->
+        if (detail == null) return@Scaffold
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            OutlinedTextField(detail.title, { onChanged(detail.copy(title = it)) }, Modifier.fillMaxWidth(), textStyle = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold), singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CompletionCircle(detail.status == "completed")
+                detail.dueDateTime.toDisplayDateTime()?.let { Tag(it, SoftPanel) }
+                Tag(detail.importance.label(), SoftPanel)
+            }
+            ElevatedPanel {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("描述", color = Muted, fontSize = 13.sp)
+                    OutlinedTextField(detail.body, { onChanged(detail.copy(body = it)) }, Modifier.fillMaxWidth(), minLines = 5, placeholder = { Text("整理本周设计进展，突出重点数据。") })
+                }
+            }
+            ElevatedPanel {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("子任务 2/3", color = Ink, fontWeight = FontWeight.Bold)
+                    SubtaskRow(true, "收集本周设计数据")
+                    SubtaskRow(true, "制作周报 PPT")
+                    SubtaskRow(false, "团队评审")
+                    Text("+   添加子任务", color = Blue)
+                }
+            }
+        }
+        FloatingConfirmButton(Modifier.padding(end = 26.dp, bottom = 26.dp).fillMaxSize(), onSave)
+    }
+}
+
+@Composable
+private fun SubtaskRow(done: Boolean, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        CompletionCircle(done, size = 18)
+        Text(text, color = Ink)
+    }
+}
+
+@Composable
+private fun VoicePage(onBack: () -> Unit, onText: (String) -> Unit, snackbarHostState: SnackbarHostState) {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (!text.isNullOrBlank()) onText(text)
+    }
+    Scaffold(
+        containerColor = Color(0xFFF8FAFF),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = { SimpleTopBar("语音输入", onBack) }
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(28.dp)) {
+            Text("你可以这样说：", color = Ink, modifier = Modifier.align(Alignment.Start))
+            Column(Modifier.align(Alignment.Start), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Tag("明天早上9点开会", WorkTag)
+                Tag("周六去超市买菜", WorkTag)
+                Tag("每周三提醒我健身", WorkTag)
+            }
+            Spacer(Modifier.height(40.dp))
+            Box(contentAlignment = Alignment.Center) {
+                repeat(3) { index ->
+                    Box(Modifier.size((190 - index * 42).dp).clip(CircleShape).background(Purple.copy(alpha = 0.08f + index * 0.05f)))
+                }
+                Box(
+                    Modifier.size(92.dp).clip(CircleShape).background(Brush.verticalGradient(listOf(Color(0xFF8F7BFF), Purple))).clickable {
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                            putExtra(RecognizerIntent.EXTRA_PROMPT, "说出要创建的任务")
+                        }
+                        launcher.launch(intent)
+                    },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("🎙", fontSize = 38.sp, color = Color.White)
+                }
+            }
+            Text("正在聆听...", color = Ink, fontWeight = FontWeight.Bold)
+            Text("松开结束", color = Muted, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun SettingsPage(
+    state: AppUiState,
+    padding: PaddingValues,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onSave: (String, String, String?, String?) -> Unit,
@@ -261,167 +545,61 @@ private fun ProfileScreen(
     var apiKey by remember { mutableStateOf("") }
     var defaultListId by remember(state.settings.defaultListId) { mutableStateOf(state.settings.defaultListId.orEmpty()) }
 
-    Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Microsoft 账号", style = MaterialTheme.typography.titleLarge)
-                Text(state.accountName ?: "未登录")
-                if (state.accountName == null) {
-                    Button(onClick = onSignIn, enabled = !state.isBusy) { Text("登录 Microsoft") }
-                } else {
-                    OutlinedButton(onClick = onSignOut, enabled = !state.isBusy) { Text("退出登录") }
+    Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("设置", color = Ink, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        ElevatedPanel {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(44.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFFFFC98B), Color(0xFF6C63FF)))))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(state.accountName ?: "Microsoft 账户", color = Ink, fontWeight = FontWeight.Bold)
+                    Text(if (state.accountName == null) "未连接" else "已连接", color = if (state.accountName == null) Muted else Color(0xFF11A36A), fontSize = 12.sp)
+                }
+                TextButton(onClick = if (state.accountName == null) onSignIn else onSignOut) {
+                    Text(if (state.accountName == null) "登录" else "退出")
                 }
             }
         }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("AI 配置", style = MaterialTheme.typography.titleLarge)
-                Text("自然语言内容会发送到你配置的 LLM 服务。API Key 只保存在本机加密存储中。", style = MaterialTheme.typography.bodySmall)
+        ElevatedPanel {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("默认任务列表", color = Muted, fontSize = 13.sp)
+                ListPicker(state.lists, defaultListId.ifBlank { state.selectedListId }, onSelected = { defaultListId = it })
+            }
+        }
+        ElevatedPanel {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("AI 设置", color = Ink, fontWeight = FontWeight.Bold)
                 OutlinedTextField(baseUrl, { baseUrl = it }, Modifier.fillMaxWidth(), label = { Text("LLM base URL") }, singleLine = true)
                 OutlinedTextField(model, { model = it }, Modifier.fillMaxWidth(), label = { Text("Model") }, singleLine = true)
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(if (state.hasApiKey) "替换 API Key" else "API Key") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-                )
-                ListPicker(state.lists, defaultListId.ifBlank { state.selectedListId }, onSelected = { defaultListId = it })
-                Button(
-                    onClick = { onSave(baseUrl, model, defaultListId.ifBlank { null }, apiKey.ifBlank { null }) },
-                    enabled = !state.isBusy,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("保存配置")
-                }
-                if (state.hasApiKey) {
-                    TextButton(onClick = onClearApiKey) { Text("清除 API Key") }
-                }
+                OutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text(if (state.hasApiKey) "替换 API Key" else "API Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+                SettingSwitch("智能拆解任务", true)
+                SettingSwitch("自动识别时间", true)
+                SettingSwitch("创建后自动完成", false)
+                GradientButton("保存设置", enabled = !state.isBusy, onClick = { onSave(baseUrl, model, defaultListId.ifBlank { null }, apiKey.ifBlank { null }) })
+                if (state.hasApiKey) TextButton(onClick = onClearApiKey) { Text("清除 API Key") }
             }
         }
+        ElevatedPanel { Text("版本 1.0.0", color = Ink) }
     }
 }
 
 @Composable
-private fun PreviewTasksCard(
-    tasks: List<EditableTask>,
-    isBusy: Boolean,
-    onTaskChanged: (Int, EditableTask) -> Unit,
-    onRemove: (Int) -> Unit,
-    onCreate: () -> Unit
-) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("创建前确认", style = MaterialTheme.typography.titleLarge)
-            tasks.forEachIndexed { index, task ->
-                EditableTaskFields(index, task, onTaskChanged, onRemove)
-            }
-            Button(onClick = onCreate, enabled = !isBusy && tasks.all { it.title.isNotBlank() }, modifier = Modifier.fillMaxWidth()) {
-                Text("批量创建 ${tasks.size} 个任务")
-            }
-        }
+private fun SettingSwitch(title: String, checked: Boolean) {
+    var value by remember { mutableStateOf(checked) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(title, color = Ink)
+        Switch(checked = value, onCheckedChange = { value = it })
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditableTaskFields(
-    index: Int,
-    task: EditableTask,
-    onTaskChanged: (Int, EditableTask) -> Unit,
-    onRemove: (Int) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("任务 ${index + 1}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = { onRemove(index) }) { Text("移除") }
-        }
-        OutlinedTextField(task.title, { onTaskChanged(index, task.copy(title = it)) }, Modifier.fillMaxWidth(), label = { Text("标题") }, singleLine = true)
-        OutlinedTextField(task.body, { onTaskChanged(index, task.copy(body = it)) }, Modifier.fillMaxWidth(), label = { Text("备注") }, minLines = 2)
-        OutlinedTextField(task.dueDateTime, { onTaskChanged(index, task.copy(dueDateTime = it)) }, Modifier.fillMaxWidth(), label = { Text("到期时间") }, singleLine = true)
-        OutlinedTextField(task.reminderDateTime, { onTaskChanged(index, task.copy(reminderDateTime = it)) }, Modifier.fillMaxWidth(), label = { Text("提醒时间") }, singleLine = true)
-        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-            OutlinedTextField(
-                modifier = Modifier.menuAnchor().fillMaxWidth(),
-                readOnly = true,
-                value = task.importance.label(),
-                onValueChange = {},
-                label = { Text("重要性") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
-            )
-            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                TaskImportance.entries.forEach { importance ->
-                    DropdownMenuItem(
-                        text = { Text(importance.label()) },
-                        onClick = {
-                            onTaskChanged(index, task.copy(importance = importance))
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
-        Text("AI confidence: ${(task.confidence * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
-    }
-}
-
-@Composable
-private fun TaskRow(
-    task: TodoTaskDto,
-    isBusy: Boolean,
-    onOpenDetail: (TodoTaskDto) -> Unit,
-    onToggleComplete: (TodoTaskDto) -> Unit,
-    onDelete: (TodoTaskDto) -> Unit
-) {
-    val completed = task.status == "completed"
-    Card(Modifier.fillMaxWidth().clickable { onOpenDetail(task) }) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text(task.title, textDecoration = if (completed) TextDecoration.LineThrough else TextDecoration.None)
-                task.dueDateTime?.dateTime?.takeIf { it.isNotBlank() }?.let {
-                    Text("Due: $it", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            AssistChip(onClick = { onToggleComplete(task) }, enabled = !isBusy && task.id != null, label = { Text(if (completed) "重开" else "完成") })
-            TextButton(onClick = { onDelete(task) }, enabled = !isBusy && task.id != null) { Text("删除") }
-        }
-    }
-}
-
-@Composable
-private fun TaskDetailPanel(
-    detail: EditableTaskDetail,
-    isBusy: Boolean,
-    modifier: Modifier,
-    onClose: () -> Unit,
-    onChanged: (EditableTaskDetail) -> Unit,
-    onSave: () -> Unit,
-    onToggleComplete: () -> Unit
-) {
-    Card(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("任务详情", style = MaterialTheme.typography.titleLarge)
-                TextButton(onClick = onClose) { Text("关闭") }
-            }
-            OutlinedTextField(detail.title, { onChanged(detail.copy(title = it)) }, Modifier.fillMaxWidth(), label = { Text("标题") }, singleLine = true)
-            OutlinedTextField(detail.body, { onChanged(detail.copy(body = it)) }, Modifier.fillMaxWidth(), label = { Text("备注") }, minLines = 4)
-            if (detail.dueDateTime.isNotBlank()) Text("到期：${detail.dueDateTime}", style = MaterialTheme.typography.bodySmall)
-            if (detail.reminderDateTime.isNotBlank()) Text("提醒：${detail.reminderDateTime}", style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onSave, enabled = !isBusy && detail.title.isNotBlank(), modifier = Modifier.weight(1f)) { Text("保存") }
-                OutlinedButton(onClick = onToggleComplete, enabled = !isBusy, modifier = Modifier.weight(1f)) {
-                    Text(if (detail.status == "completed") "重新打开" else "完成")
-                }
-            }
-        }
-    }
+private fun SimpleTopBar(title: String, onBack: () -> Unit, trailing: String? = null) {
+    TopAppBar(
+        title = { Text(title, color = Ink, fontWeight = FontWeight.Bold) },
+        navigationIcon = { IconButton(onClick = onBack) { Text("‹", fontSize = 30.sp, color = Ink) } },
+        actions = { trailing?.let { Text(it, Modifier.padding(end = 16.dp), color = Ink, fontSize = 24.sp) } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -433,55 +611,127 @@ private fun ListPicker(lists: List<TodoListDto>, selectedListId: String?, onSele
         OutlinedTextField(
             modifier = Modifier.menuAnchor().fillMaxWidth(),
             readOnly = true,
-            value = selected?.displayName ?: "No list loaded",
+            value = selected?.displayName ?: "我的每日任务",
             onValueChange = {},
-            label = { Text("Microsoft To Do list") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             lists.forEach { list ->
-                DropdownMenuItem(
-                    text = { Text(list.displayName) },
-                    onClick = {
-                        onSelected(list.id)
-                        expanded = false
-                    }
-                )
+                DropdownMenuItem(text = { Text(list.displayName) }, onClick = {
+                    onSelected(list.id)
+                    expanded = false
+                })
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppTopBar(state: AppUiState) {
-    TopAppBar(
-        title = {
-            Column {
-                Text("AI To Do")
-                Text(state.accountName ?: "未登录", style = MaterialTheme.typography.bodySmall)
-            }
+private fun ElevatedPanel(contentPadding: PaddingValues = PaddingValues(16.dp), content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Panel),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Box(Modifier.padding(contentPadding)) { content() }
+    }
+}
+
+@Composable
+private fun GradientButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().height(58.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, disabledContainerColor = Color(0xFFC7CCDD)),
+        contentPadding = PaddingValues(0.dp)
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Purple, Blue))),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text, color = Color.White, fontWeight = FontWeight.Bold)
         }
+    }
+}
+
+@Composable
+private fun FloatingAddButton(modifier: Modifier, onClick: () -> Unit) {
+    Box(modifier.size(58.dp).clip(CircleShape).background(Brush.verticalGradient(listOf(Purple, Blue))).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Text("+", color = Color.White, fontSize = 34.sp)
+    }
+}
+
+@Composable
+private fun FloatingConfirmButton(modifier: Modifier, onClick: () -> Unit) {
+    Box(modifier, contentAlignment = Alignment.BottomEnd) {
+        Box(Modifier.size(58.dp).clip(CircleShape).background(Brush.verticalGradient(listOf(Purple, Blue))).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+            Text("✓", color = Color.White, fontSize = 28.sp)
+        }
+    }
+}
+
+@Composable
+private fun CompletionCircle(completed: Boolean, modifier: Modifier = Modifier, size: Int = 22) {
+    Box(
+        modifier.size(size.dp).clip(CircleShape).border(1.5.dp, if (completed) Blue else Color(0xFF9AA3B8), CircleShape).background(if (completed) Color(0xFFEDEBFF) else Color.Transparent),
+        contentAlignment = Alignment.Center
+    ) {
+        if (completed) Text("✓", color = Blue, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun Tag(text: String, color: Color) {
+    Text(
+        text = text,
+        color = Blue,
+        fontSize = 12.sp,
+        modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(color).padding(horizontal = 10.dp, vertical = 4.dp)
     )
 }
 
 @Composable
-private fun NoticeCard(title: String, message: String, action: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(message, style = MaterialTheme.typography.bodyMedium)
-            action()
-        }
+private fun GradientBubble(text: String) {
+    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Brush.horizontalGradient(listOf(Purple, Blue))).padding(14.dp)) {
+        Text(text, color = Color.White, fontSize = 14.sp)
     }
 }
 
 @Composable
-private fun BusyRow(isBusy: Boolean) {
-    if (!isBusy) return
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        CircularProgressIndicator(modifier = Modifier.width(24.dp).height(24.dp), strokeWidth = 2.dp)
-        Spacer(Modifier.width(12.dp))
-        Text("Working...")
+private fun IconTextButton(text: String, onClick: () -> Unit) {
+    Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Text(text, color = Ink, fontSize = 20.sp)
     }
 }
+
+@Composable
+private fun DividerLine() {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+}
+
+private fun String?.toDisplayDateTime(): String? {
+    val raw = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val localDateTime = parseGraphDateTime(raw) ?: return raw.take(16)
+    val today = LocalDate.now()
+    val date = localDateTime.toLocalDate()
+    val dateText = when (date) {
+        today -> "今天"
+        today.plusDays(1) -> "明天"
+        else -> date.format(DateTimeFormatter.ofPattern("M月d日"))
+    }
+    val time = localDateTime.toLocalTime()
+    val hasExplicitTime = !(time.hour == 0 && time.minute == 0 && time.second == 0)
+    return if (hasExplicitTime) {
+        "$dateText ${localDateTime.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+    } else {
+        dateText
+    }
+}
+
+private fun parseGraphDateTime(value: String): LocalDateTime? =
+    runCatching { OffsetDateTime.parse(value).toLocalDateTime() }.getOrNull()
+        ?: runCatching { LocalDateTime.parse(value) }.getOrNull()
+        ?: runCatching { LocalDate.parse(value).atStartOfDay() }.getOrNull()

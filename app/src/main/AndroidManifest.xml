@@ -23,6 +23,14 @@
         </activity>
 
         <activity
+            android:name=".WidgetAiEntryActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:finishOnTaskLaunch="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.AiTodoEntry.WidgetOverlay" />
+
+        <activity
             android:name="com.microsoft.identity.client.BrowserTabActivity"
             android:exported="true">
             <intent-filter>
@@ -41,10 +49,46 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.xiang.ai.todoentry.widget.REFRESH" />
+                <action android:name="com.xiang.ai.todoentry.widget.STATUS" />
+                <action android:name="com.xiang.ai.todoentry.widget.IMPORTANCE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/today_tasks_widget" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.QuickAddWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/quick_add_widget" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.AiEntryWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ai_entry_widget" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.ComboWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/combo_widget" />
         </receiver>
     </application>
 </manifest>
