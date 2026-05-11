@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AI To Do Entry</string>
+    <string name="widget_today_tasks_description">Show today Microsoft To Do tasks</string>
+</resources>

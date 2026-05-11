@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="今日任务"
+        android:textColor="#172033"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textColor="#5D667A"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/widget_task_1"
+        style="@style/WidgetTaskText" />
+
+    <TextView
+        android:id="@+id/widget_task_2"
+        style="@style/WidgetTaskText" />
+
+    <TextView
+        android:id="@+id/widget_task_3"
+        style="@style/WidgetTaskText" />
+
+    <TextView
+        android:id="@+id/widget_task_4"
+        style="@style/WidgetTaskText" />
+</LinearLayout>

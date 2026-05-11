@@ -1,0 +1,2 @@
+-keep class com.microsoft.identity.** { *; }
+-keep class com.microsoft.aad.** { *; }
