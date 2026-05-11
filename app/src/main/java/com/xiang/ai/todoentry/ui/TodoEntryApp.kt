@@ -3,6 +3,7 @@ package com.xiang.ai.todoentry.ui
 import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -95,6 +96,14 @@ fun TodoEntryApp(viewModel: MainViewModel, activity: Activity) {
     LaunchedEffect(state.error, state.status) {
         state.error?.let { snackbarHostState.showSnackbar(it) }
         state.status?.let { snackbarHostState.showSnackbar(it) }
+    }
+
+    BackHandler(enabled = state.currentPage != AppPage.MAIN) {
+        when (state.currentPage) {
+            AppPage.PREVIEW -> viewModel.closePage()
+            AppPage.DETAIL -> viewModel.closeTaskDetail()
+            AppPage.MAIN -> Unit
+        }
     }
 
     Surface(color = Color(0xFFF8FAFF)) {
