@@ -1,4 +1,6 @@
 app/build/
 .gradle/
 .idea/
+local.properties
+emulator-screen.png
 vivo-window*.xml
