@@ -4,14 +4,26 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+import java.util.Properties
+
 android {
     namespace = "com.xiang.ai.todoentry"
     compileSdk = 35
 
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties().apply {
+        if (keystorePropertiesFile.exists()) {
+            keystorePropertiesFile.inputStream().use(::load)
+        }
+    }
     val releaseStoreFile = System.getenv("AI_TODO_KEYSTORE_FILE")
+        ?: keystoreProperties.getProperty("storeFile")
     val releaseStorePassword = System.getenv("AI_TODO_KEYSTORE_PASSWORD")
+        ?: keystoreProperties.getProperty("storePassword")
     val releaseKeyAlias = System.getenv("AI_TODO_KEY_ALIAS")
+        ?: keystoreProperties.getProperty("keyAlias")
     val releaseKeyPassword = System.getenv("AI_TODO_KEY_PASSWORD")
+        ?: keystoreProperties.getProperty("keyPassword")
     val hasReleaseSigning = listOf(
         releaseStoreFile,
         releaseStorePassword,
@@ -31,7 +43,7 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(releaseStoreFile!!)
+                storeFile = rootProject.file(releaseStoreFile!!)
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword

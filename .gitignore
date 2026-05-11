@@ -2,5 +2,8 @@ app/build/
 .gradle/
 .idea/
 local.properties
+keystore.properties
+*.jks
+*.keystore
 emulator-screen.png
 vivo-window*.xml
