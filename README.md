@@ -112,13 +112,22 @@ Build release APK:
 ./gradlew assembleRelease
 ```
 
-The default release APK is unsigned:
+Without signing environment variables, the default release APK is unsigned:
 
 ```text
 app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
-Configure a signing key before publishing outside local testing or CI artifacts.
+For a signed release build, provide these environment variables:
+
+```text
+AI_TODO_KEYSTORE_FILE
+AI_TODO_KEYSTORE_PASSWORD
+AI_TODO_KEY_ALIAS
+AI_TODO_KEY_PASSWORD
+```
+
+Do not commit the keystore or passwords.
 
 ## CI
 
@@ -135,6 +144,17 @@ It runs:
 - `assembleRelease`
 
 The release APK is uploaded as a workflow artifact.
+
+To let CI build a signed release APK, add these repository secrets:
+
+```text
+AI_TODO_KEYSTORE_BASE64
+AI_TODO_KEYSTORE_PASSWORD
+AI_TODO_KEY_ALIAS
+AI_TODO_KEY_PASSWORD
+```
+
+`AI_TODO_KEYSTORE_BASE64` should be the base64-encoded contents of the `.jks` keystore file.
 
 ## Privacy
 

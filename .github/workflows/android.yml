@@ -36,7 +36,17 @@ jobs:
       - name: Run Android lint
         run: ./gradlew lintDebug
 
+      - name: Decode release keystore
+        if: ${{ secrets.AI_TODO_KEYSTORE_BASE64 != '' && secrets.AI_TODO_KEYSTORE_PASSWORD != '' && secrets.AI_TODO_KEY_ALIAS != '' && secrets.AI_TODO_KEY_PASSWORD != '' }}
+        run: |
+          echo "${{ secrets.AI_TODO_KEYSTORE_BASE64 }}" | base64 --decode > release-keystore.jks
+
       - name: Build release APK
+        env:
+          AI_TODO_KEYSTORE_FILE: ${{ github.workspace }}/release-keystore.jks
+          AI_TODO_KEYSTORE_PASSWORD: ${{ secrets.AI_TODO_KEYSTORE_PASSWORD }}
+          AI_TODO_KEY_ALIAS: ${{ secrets.AI_TODO_KEY_ALIAS }}
+          AI_TODO_KEY_PASSWORD: ${{ secrets.AI_TODO_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
       - name: Upload release APK

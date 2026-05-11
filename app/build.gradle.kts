@@ -8,6 +8,17 @@ android {
     namespace = "com.xiang.ai.todoentry"
     compileSdk = 35
 
+    val releaseStoreFile = System.getenv("AI_TODO_KEYSTORE_FILE")
+    val releaseStorePassword = System.getenv("AI_TODO_KEYSTORE_PASSWORD")
+    val releaseKeyAlias = System.getenv("AI_TODO_KEY_ALIAS")
+    val releaseKeyPassword = System.getenv("AI_TODO_KEY_PASSWORD")
+    val hasReleaseSigning = listOf(
+        releaseStoreFile,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword
+    ).all { !it.isNullOrBlank() }
+
     defaultConfig {
         applicationId = "com.xiang.ai.todoentry"
         minSdk = 26
@@ -17,9 +28,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
