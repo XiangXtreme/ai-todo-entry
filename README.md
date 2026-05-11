@@ -1,28 +1,29 @@
 # AI To Do Entry
 
-AI To Do Entry is a lightweight Android companion for Microsoft To Do. It focuses on one workflow: describe a task in natural language, let an OpenAI-compatible model convert it into structured task data, review it, and create it in Microsoft To Do through Microsoft Graph.
+AI To Do Entry 是一个轻量级 Android 应用，用来补充 Microsoft To Do 缺少的 AI 快速建任务能力。用户用自然语言描述要做的事，应用调用 OpenAI-compatible 模型解析成结构化任务，确认后通过 Microsoft Graph 创建到 Microsoft To Do。
 
-This project is not a full Microsoft To Do clone. It keeps task management intentionally small and uses Microsoft To Do as the source of truth.
+这个项目不是完整的 To Do 克隆。任务数据仍以 Microsoft To Do 为准，本应用只做 AI 入口和轻量管理。
 
-## Features
+## 功能
 
-- Natural-language task creation with an OpenAI-compatible LLM endpoint.
-- Microsoft personal account sign-in through MSAL Android.
-- Microsoft Graph To Do integration:
-  - fetch task lists
-  - create tasks
-  - view tasks
-  - complete or reopen tasks
-  - delete tasks
-  - edit title, notes, importance, due date, and reminder
-- Editable AI preview before creating tasks.
-- Optional setting to skip AI creation confirmation.
-- 2x1 Android home-screen widget for quick AI task entry.
-- Local AI connectivity test in the settings screen.
-- Encrypted local storage for the LLM API key.
-- GitHub Actions CI for tests, lint, and release APK build.
+- 自然语言生成 Microsoft To Do 任务
+- 支持 OpenAI-compatible LLM 接口
+- 使用 MSAL Android 登录个人 Microsoft 账号
+- 通过 Microsoft Graph 管理 To Do：
+  - 获取任务列表
+  - 创建任务
+  - 查看任务
+  - 完成 / 重新打开任务
+  - 删除任务
+  - 编辑标题、备注、重要性、到期时间、提醒时间
+- AI 解析后先进入预览，用户可确认再创建
+- 可选跳过 AI 创建确认
+- 2x1 桌面小组件，用于快速打开 AI 建任务入口
+- AI 设置页支持连通性测试
+- LLM API Key 使用本机加密存储
+- GitHub Actions 自动运行测试、lint 和 release 构建
 
-## Tech Stack
+## 技术栈
 
 - Kotlin
 - Jetpack Compose
@@ -35,90 +36,94 @@ This project is not a full Microsoft To Do clone. It keeps task management inten
 - DataStore
 - Jetpack Security Crypto
 
-## Requirements
+## 环境要求
 
 - Android Studio
 - JDK 17
-- Android SDK with compile SDK 35
-- Android device or emulator running Android 8.0 or later
-- Microsoft personal account
-- Azure App Registration for MSAL Android
-- OpenAI-compatible LLM endpoint and API key
+- Android SDK，compile SDK 35
+- Android 8.0 或更高版本的真机 / 模拟器
+- 个人 Microsoft 账号
+- Azure App Registration
+- OpenAI-compatible LLM 服务和 API Key
 
-## Microsoft Setup
+## Microsoft 配置
 
-The app uses delegated Microsoft Graph permissions for a personal Microsoft account.
+应用使用 Microsoft Graph delegated 权限访问个人 Microsoft To Do。
 
-Required scopes:
+需要的权限：
 
 - `User.Read`
 - `Tasks.ReadWrite`
 
-The included package name is:
+当前包名：
 
 ```text
 com.xiang.ai.todoentry
 ```
 
-The MSAL config is stored in:
+MSAL 配置文件：
 
 ```text
 app/src/main/res/raw/msal_config.json
 ```
 
-For your own deployment, create an Azure App Registration and update:
+如果你要部署自己的版本，需要在 Azure Portal 创建 App Registration，并更新：
 
 - `client_id`
 - `redirect_uri`
-- Android redirect URI in the Azure portal
+- Azure Portal 中的 Android redirect URI
 
-The committed `client_id` is a public-client identifier, not a secret. Do not commit client secrets, signing keystores, or API keys.
+仓库里提交的 `client_id` 是 public client 标识，不是密钥。不要提交 client secret、签名证书、API Key 或任何密码。
 
-## LLM Setup
+## LLM 配置
 
-Open the app and go to `My` / `AI Settings`.
+打开应用后进入 `我的` / `AI 设置`。
 
-Configure:
+需要填写：
 
-- Base URL, for example `https://api.deepseek.com`
-- Model, for example `deepseek-v4-flash`
+- Base URL，例如 `https://api.deepseek.com`
+- Model，例如 `deepseek-v4-flash`
 - API Key
 
-The API key is stored only on the device through encrypted shared preferences. It is not committed, logged, or sent to Microsoft Graph.
+API Key 只保存在设备本地的加密存储中，不会提交到仓库，也不会写入日志。
 
-## Build
+## 构建
 
-Run unit tests:
+运行单元测试：
 
 ```bash
 ./gradlew testDebugUnitTest
 ```
 
-Run Android lint:
+运行 Android lint：
 
 ```bash
 ./gradlew lintDebug
 ```
 
-Build debug APK:
+构建 debug APK：
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-Build release APK:
+构建 release APK：
 
 ```bash
 ./gradlew assembleRelease
 ```
 
-Without signing environment variables, the default release APK is unsigned:
+如果没有配置签名环境变量，默认产物是 unsigned release APK：
 
 ```text
 app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
-For a signed release build, provide these environment variables:
+## Release 签名
+
+本项目支持通过环境变量注入 release 签名信息。
+
+本地 signed release 构建需要提供：
 
 ```text
 AI_TODO_KEYSTORE_FILE
@@ -127,25 +132,25 @@ AI_TODO_KEY_ALIAS
 AI_TODO_KEY_PASSWORD
 ```
 
-Do not commit the keystore or passwords.
+不要把 `.jks`、密码或 keystore properties 提交到仓库。
 
-## CI
+## GitHub Actions
 
-GitHub Actions workflow:
+CI 配置文件：
 
 ```text
 .github/workflows/android.yml
 ```
 
-It runs:
+CI 会运行：
 
 - `testDebugUnitTest`
 - `lintDebug`
 - `assembleRelease`
 
-The release APK is uploaded as a workflow artifact.
+release APK 会作为 workflow artifact 上传。
 
-To let CI build a signed release APK, add these repository secrets:
+如果希望 GitHub Actions 构建 signed release APK，需要在仓库 Secrets 中配置：
 
 ```text
 AI_TODO_KEYSTORE_BASE64
@@ -154,26 +159,26 @@ AI_TODO_KEY_ALIAS
 AI_TODO_KEY_PASSWORD
 ```
 
-`AI_TODO_KEYSTORE_BASE64` should be the base64-encoded contents of the `.jks` keystore file.
+`AI_TODO_KEYSTORE_BASE64` 是 `.jks` 文件内容的 base64 编码。
 
-## Privacy
+## 隐私说明
 
-- Natural-language task input is sent to the configured LLM service.
-- Created tasks are sent to Microsoft Graph.
-- The LLM API key is stored locally in encrypted storage.
-- The app does not intentionally store task input history.
-- Do not commit API keys, keystores, passwords, or Microsoft client secrets.
+- 用户输入的自然语言内容会发送到用户配置的 LLM 服务。
+- 创建任务时，任务内容会发送到 Microsoft Graph。
+- LLM API Key 只保存在本机加密存储中。
+- 应用不会主动保存用户输入历史。
+- 不要提交 API Key、签名证书、密码、Microsoft client secret 等敏感信息。
 
-## Repository Notes
+## 仓库说明
 
-Ignored local files include:
+以下本地文件已被忽略：
 
 - `.idea/`
 - `.gradle/`
 - `local.properties`
-- build outputs
-- local device/window debug captures
+- 构建产物
+- 本地设备 / 窗口调试抓取文件
 
-## License
+## 许可证
 
-No license has been selected yet.
+暂未选择许可证。
