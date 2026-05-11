@@ -9,6 +9,7 @@ import com.xiang.ai.todoentry.ai.OpenAiTaskParser
 import com.xiang.ai.todoentry.ai.TaskImportance
 import com.xiang.ai.todoentry.auth.AuthRepository
 import com.xiang.ai.todoentry.graph.CreateTodoTaskRequest
+import com.xiang.ai.todoentry.graph.DateTimeTimeZone
 import com.xiang.ai.todoentry.graph.GraphClient
 import com.xiang.ai.todoentry.graph.GraphException
 import com.xiang.ai.todoentry.graph.ItemBody
@@ -17,13 +18,13 @@ import com.xiang.ai.todoentry.graph.TodoTaskDto
 import com.xiang.ai.todoentry.graph.UpdateTodoTaskRequest
 import com.xiang.ai.todoentry.settings.AppSettings
 import com.xiang.ai.todoentry.settings.SettingsRepository
-import com.xiang.ai.todoentry.widget.TodayTasksWidgetProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 
 class MainViewModel(
     private val authRepository: AuthRepository,
@@ -79,7 +80,6 @@ class MainViewModel(
                     status = "Signed out"
                 )
             }
-            updateWidget()
         }
     }
 
@@ -179,7 +179,7 @@ class MainViewModel(
                     remaining.removeAt(0)
                 } catch (throwable: Throwable) {
                     if (created.isNotEmpty()) {
-                        val tasks = graphClient.getTasks(token, listId)
+                        val tasks = graphClient.getTasks(token, listId).sortedForTodoDisplay()
                         _uiState.update {
                             it.copy(
                                 previewTasks = remaining,
@@ -188,12 +188,11 @@ class MainViewModel(
                                 status = "Created ${created.size} task(s). ${remaining.size} task(s) still need retry."
                             )
                         }
-                        updateWidget()
                     }
                     throw throwable
                 }
             }
-            val tasks = graphClient.getTasks(token, listId)
+            val tasks = graphClient.getTasks(token, listId).sortedForTodoDisplay()
             val listName = current.lists.firstOrNull { it.id == listId }?.displayName ?: "selected list"
             _uiState.update {
                 it.copy(
@@ -207,7 +206,6 @@ class MainViewModel(
                     status = "Created ${created.size} task(s) in $listName"
                 )
             }
-            updateWidget()
         }
     }
 
@@ -215,9 +213,8 @@ class MainViewModel(
         runBusy {
             val listId = _uiState.value.selectedListId ?: throw IllegalStateException("Select a To Do list first")
             val token = authRepository.acquireTokenSilent()
-            val tasks = graphClient.getTasks(token, listId)
+            val tasks = graphClient.getTasks(token, listId).sortedForTodoDisplay()
             _uiState.update { it.copy(tasks = tasks, status = "Tasks refreshed") }
-            updateWidget()
         }
     }
 
@@ -233,7 +230,7 @@ class MainViewModel(
                 taskId = taskId,
                 requestBody = UpdateTodoTaskRequest(status = if (completed) "notStarted" else "completed")
             )
-            val tasks = graphClient.getTasks(token, listId)
+            val tasks = graphClient.getTasks(token, listId).sortedForTodoDisplay()
             _uiState.update {
                 it.copy(
                     tasks = tasks,
@@ -242,7 +239,6 @@ class MainViewModel(
                     status = if (completed) "Task reopened" else "Task completed"
                 )
             }
-            updateWidget()
         }
     }
 
@@ -254,12 +250,11 @@ class MainViewModel(
             graphClient.deleteTask(token, listId, taskId)
             _uiState.update { state ->
                 state.copy(
-                    tasks = state.tasks.filterNot { it.id == taskId },
+                    tasks = state.tasks.filterNot { it.id == taskId }.sortedForTodoDisplay(),
                     selectedTask = state.selectedTask?.takeIf { it.id != taskId },
                     status = "Deleted \"${task.title}\""
                 )
             }
-            updateWidget()
         }
     }
 
@@ -316,10 +311,13 @@ class MainViewModel(
                 requestBody = UpdateTodoTaskRequest(
                     title = detail.title.trim(),
                     importance = detail.importance.graphValue,
-                    body = ItemBody(content = detail.body)
+                    body = ItemBody(content = detail.body),
+                    dueDateTime = detail.dueDateTime.takeIf { it.isNotBlank() }?.let { DateTimeTimeZone.fromLocalInput(it) },
+                    reminderDateTime = detail.reminderDateTime.takeIf { it.isNotBlank() }?.let { DateTimeTimeZone.fromLocalInput(it) },
+                    isReminderOn = detail.reminderDateTime.isNotBlank()
                 )
             )
-            val tasks = graphClient.getTasks(token, listId)
+            val tasks = graphClient.getTasks(token, listId).sortedForTodoDisplay()
             _uiState.update {
                 it.copy(
                     tasks = tasks,
@@ -327,7 +325,6 @@ class MainViewModel(
                     status = "Task saved"
                 )
             }
-            updateWidget()
         }
     }
 
@@ -356,18 +353,24 @@ class MainViewModel(
         }
     }
 
-    fun saveSettings(baseUrl: String, model: String, defaultListId: String?, apiKey: String?) {
+    fun saveSettings(
+        baseUrl: String,
+        model: String,
+        defaultListId: String?,
+        apiKey: String?,
+        skipAiCreationConfirmation: Boolean
+    ) {
         runBusy {
             settingsRepository.saveSettings(
                 AppSettings(
                     llmBaseUrl = baseUrl,
                     llmModel = model,
-                    defaultListId = defaultListId
+                    defaultListId = defaultListId,
+                    skipAiCreationConfirmation = skipAiCreationConfirmation
                 )
             )
             if (!apiKey.isNullOrBlank()) settingsRepository.saveApiKey(apiKey)
             _uiState.update { it.copy(hasApiKey = settingsRepository.getApiKey() != null, showSettings = false, status = "Settings saved") }
-            updateWidget()
         }
     }
 
@@ -387,10 +390,9 @@ class MainViewModel(
         }
         val selectedListId = _uiState.value.selectedListId
         if (selectedListId != null) {
-            val tasks = graphClient.getTasks(token, selectedListId)
+            val tasks = graphClient.getTasks(token, selectedListId).sortedForTodoDisplay()
             _uiState.update { it.copy(tasks = tasks) }
         }
-        updateWidget()
     }
 
     private fun chooseList(targetListName: String?, lists: List<TodoListDto>, fallbackId: String?): TodoListDto? {
@@ -409,10 +411,6 @@ class MainViewModel(
                 }
             _uiState.update { it.copy(isBusy = false) }
         }
-    }
-
-    private fun updateWidget() {
-        appContext?.let(TodayTasksWidgetProvider::refresh)
     }
 
     private fun Throwable.toUserMessage(): String = when (this) {
@@ -436,6 +434,21 @@ class MainViewModel(
         }
     }
 }
+
+private fun List<TodoTaskDto>.sortedForTodoDisplay(): List<TodoTaskDto> =
+    sortedWith(
+        compareBy<TodoTaskDto> { it.status == "completed" }
+            .thenByDescending { it.importance == "high" }
+            .thenBy { it.nextTaskDateSortKey() ?: LocalDateTime.MAX }
+            .thenBy { it.title.lowercase() }
+    )
+
+private fun TodoTaskDto.nextTaskDateSortKey(): LocalDateTime? =
+    reminderDateTime?.dateTime?.parseGraphDateTime()
+        ?: dueDateTime?.dateTime?.parseGraphDateTime()
+
+private fun String.parseGraphDateTime(): LocalDateTime? =
+    runCatching { LocalDateTime.parse(substringBefore(".")) }.getOrNull()
 
 fun TaskImportance.label(): String = when (this) {
     TaskImportance.LOW -> "Low"

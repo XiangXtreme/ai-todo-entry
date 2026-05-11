@@ -1,6 +1,8 @@
 package com.xiang.ai.todoentry.ui
 
 import android.app.Activity
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Intent
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -76,6 +78,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.Locale
 
 private val Ink = Color(0xFF101936)
@@ -327,7 +330,7 @@ private fun HomeTaskRow(task: TodoTaskDto) {
             Text(task.title, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             TaskTimeText(task.dueDateTime?.dateTime)
         }
-        Tag(if (task.importance == "high") "工作" else "生活", if (task.importance == "high") WorkTag else LifeTag)
+        if (task.importance == "high") Text("☆", color = Blue, fontSize = 24.sp)
     }
 }
 
@@ -452,38 +455,136 @@ private fun DetailPage(
         topBar = { SimpleTopBar("", onBack, trailing = "⋮") }
     ) { padding ->
         if (detail == null) return@Scaffold
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            OutlinedTextField(detail.title, { onChanged(detail.copy(title = it)) }, Modifier.fillMaxWidth(), textStyle = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold), singleLine = true)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CompletionCircle(detail.status == "completed")
-                detail.dueDateTime.toDisplayDateTime()?.let { Tag(it, SoftPanel) }
-                Tag(detail.importance.label(), SoftPanel)
-            }
-            ElevatedPanel {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("描述", color = Muted, fontSize = 13.sp)
-                    OutlinedTextField(detail.body, { onChanged(detail.copy(body = it)) }, Modifier.fillMaxWidth(), minLines = 5, placeholder = { Text("整理本周设计进展，突出重点数据。") })
-                }
-            }
-            ElevatedPanel {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("子任务 2/3", color = Ink, fontWeight = FontWeight.Bold)
-                    SubtaskRow(true, "收集本周设计数据")
-                    SubtaskRow(true, "制作周报 PPT")
-                    SubtaskRow(false, "团队评审")
-                    Text("+   添加子任务", color = Blue)
-                }
-            }
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            DetailHeader(detail = detail, onChanged = onChanged, onToggleComplete = onToggleComplete)
+            DetailPropertyCard(detail = detail, onChanged = onChanged)
+            DetailNotesCard(detail = detail, onChanged = onChanged)
         }
         FloatingConfirmButton(Modifier.padding(end = 26.dp, bottom = 26.dp).fillMaxSize(), onSave)
     }
 }
 
 @Composable
-private fun SubtaskRow(done: Boolean, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        CompletionCircle(done, size = 18)
-        Text(text, color = Ink)
+private fun DetailHeader(detail: EditableTaskDetail, onChanged: (EditableTaskDetail) -> Unit, onToggleComplete: () -> Unit) {
+    ElevatedPanel(contentPadding = PaddingValues(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CompletionCircle(detail.status == "completed", Modifier.clickable(onClick = onToggleComplete), size = 26)
+            Spacer(Modifier.width(12.dp))
+            OutlinedTextField(
+                detail.title,
+                { onChanged(detail.copy(title = it)) },
+                Modifier.weight(1f),
+                textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                singleLine = true
+            )
+            TextButton(onClick = {
+                onChanged(detail.copy(importance = if (detail.importance == TaskImportance.HIGH) TaskImportance.NORMAL else TaskImportance.HIGH))
+            }) {
+                Text(if (detail.importance == TaskImportance.HIGH) "★" else "☆", fontSize = 28.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailPropertyCard(detail: EditableTaskDetail, onChanged: (EditableTaskDetail) -> Unit) {
+    ElevatedPanel(contentPadding = PaddingValues(0.dp)) {
+        Column {
+            DetailDatePickerRow(
+                icon = "⏰",
+                label = "提醒我",
+                value = detail.reminderDateTime,
+                includeTime = true,
+                emptyText = "添加提醒",
+                onValueChange = { onChanged(detail.copy(reminderDateTime = it)) },
+                onClear = { onChanged(detail.copy(reminderDateTime = "")) }
+            )
+            DividerLine()
+            DetailDatePickerRow(
+                icon = "▣",
+                label = "到期",
+                value = detail.dueDateTime,
+                includeTime = false,
+                emptyText = "设置截止日期",
+                onValueChange = { onChanged(detail.copy(dueDateTime = it)) },
+                onClear = { onChanged(detail.copy(dueDateTime = "")) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailDatePickerRow(
+    icon: String,
+    label: String,
+    value: String,
+    includeTime: Boolean,
+    emptyText: String,
+    onValueChange: (String) -> Unit,
+    onClear: () -> Unit
+) {
+    val context = LocalContext.current
+    val current = value.toLocalDateTimeOrNull() ?: LocalDateTime.now().plusHours(1).withMinute(0).withSecond(0).withNano(0)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable {
+                DatePickerDialog(
+                    context,
+                    { _, year, month, day ->
+                        val selectedDate = LocalDate.of(year, month + 1, day)
+                        if (includeTime) {
+                            TimePickerDialog(
+                                context,
+                                { _, hour, minute ->
+                                    onValueChange(selectedDate.atTime(hour, minute, 0).toString())
+                                },
+                                current.hour,
+                                current.minute,
+                                true
+                            ).show()
+                        } else {
+                            onValueChange(selectedDate.atStartOfDay().toString())
+                        }
+                    },
+                    current.year,
+                    current.monthValue - 1,
+                    current.dayOfMonth
+                ).show()
+            }
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(icon, color = Muted, fontSize = 20.sp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, color = if (value.isBlank()) Muted else Blue, fontSize = 13.sp)
+            Text(
+                value.toDetailDisplayDateTime(includeTime) ?: emptyText,
+                color = if (value.isBlank()) Muted else Ink,
+                fontSize = 16.sp,
+                fontWeight = if (value.isBlank()) FontWeight.Normal else FontWeight.SemiBold
+            )
+        }
+        if (value.isNotBlank()) {
+            TextButton(onClick = onClear) { Text("清除") }
+        }
+    }
+}
+
+@Composable
+private fun DetailNotesCard(detail: EditableTaskDetail, onChanged: (EditableTaskDetail) -> Unit) {
+    ElevatedPanel {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("备注", color = Muted, fontSize = 13.sp)
+            OutlinedTextField(
+                detail.body,
+                { onChanged(detail.copy(body = it)) },
+                Modifier.fillMaxWidth(),
+                minLines = 4,
+                placeholder = { Text("添加备注") }
+            )
+        }
     }
 }
 
@@ -537,13 +638,16 @@ private fun SettingsPage(
     padding: PaddingValues,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
-    onSave: (String, String, String?, String?) -> Unit,
+    onSave: (String, String, String?, String?, Boolean) -> Unit,
     onClearApiKey: () -> Unit
 ) {
     var baseUrl by remember(state.settings.llmBaseUrl) { mutableStateOf(state.settings.llmBaseUrl) }
     var model by remember(state.settings.llmModel) { mutableStateOf(state.settings.llmModel) }
     var apiKey by remember { mutableStateOf("") }
     var defaultListId by remember(state.settings.defaultListId) { mutableStateOf(state.settings.defaultListId.orEmpty()) }
+    var skipConfirmation by remember(state.settings.skipAiCreationConfirmation) {
+        mutableStateOf(state.settings.skipAiCreationConfirmation)
+    }
 
     Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("设置", color = Ink, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -572,10 +676,16 @@ private fun SettingsPage(
                 OutlinedTextField(baseUrl, { baseUrl = it }, Modifier.fillMaxWidth(), label = { Text("LLM base URL") }, singleLine = true)
                 OutlinedTextField(model, { model = it }, Modifier.fillMaxWidth(), label = { Text("Model") }, singleLine = true)
                 OutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text(if (state.hasApiKey) "替换 API Key" else "API Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-                SettingSwitch("智能拆解任务", true)
-                SettingSwitch("自动识别时间", true)
-                SettingSwitch("创建后自动完成", false)
-                GradientButton("保存设置", enabled = !state.isBusy, onClick = { onSave(baseUrl, model, defaultListId.ifBlank { null }, apiKey.ifBlank { null }) })
+                SettingSwitch("跳过创建确认", skipConfirmation, onCheckedChange = { skipConfirmation = it })
+                GradientButton("保存设置", enabled = !state.isBusy, onClick = {
+                    onSave(
+                        baseUrl,
+                        model,
+                        defaultListId.ifBlank { null },
+                        apiKey.ifBlank { null },
+                        skipConfirmation
+                    )
+                })
                 if (state.hasApiKey) TextButton(onClick = onClearApiKey) { Text("清除 API Key") }
             }
         }
@@ -584,11 +694,17 @@ private fun SettingsPage(
 }
 
 @Composable
-private fun SettingSwitch(title: String, checked: Boolean) {
-    var value by remember { mutableStateOf(checked) }
+private fun SettingSwitch(title: String, checked: Boolean, onCheckedChange: ((Boolean) -> Unit)? = null) {
+    var value by remember(checked) { mutableStateOf(checked) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(title, color = Ink)
-        Switch(checked = value, onCheckedChange = { value = it })
+        Switch(
+            checked = value,
+            onCheckedChange = {
+                value = it
+                onCheckedChange?.invoke(it)
+            }
+        )
     }
 }
 
@@ -735,3 +851,25 @@ private fun parseGraphDateTime(value: String): LocalDateTime? =
     runCatching { OffsetDateTime.parse(value).toLocalDateTime() }.getOrNull()
         ?: runCatching { LocalDateTime.parse(value) }.getOrNull()
         ?: runCatching { LocalDate.parse(value).atStartOfDay() }.getOrNull()
+
+private fun String.toLocalDateTimeOrNull(): LocalDateTime? =
+    try {
+        LocalDateTime.parse(this)
+    } catch (_: DateTimeParseException) {
+        null
+    }
+
+private fun String.toDetailDisplayDateTime(includeTime: Boolean): String? {
+    val dateTime = toLocalDateTimeOrNull() ?: return null
+    val today = LocalDate.now()
+    val dateText = when (dateTime.toLocalDate()) {
+        today -> "今天"
+        today.plusDays(1) -> "明天"
+        else -> dateTime.toLocalDate().format(DateTimeFormatter.ofPattern("M月d日"))
+    }
+    return if (includeTime) {
+        "$dateText ${dateTime.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+    } else {
+        dateText
+    }
+}

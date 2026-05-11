@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +24,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -45,16 +49,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiang.ai.todoentry.ai.OpenAiTaskParser
+import com.xiang.ai.todoentry.ai.ParsedTask
 import com.xiang.ai.todoentry.auth.AuthRepository
 import com.xiang.ai.todoentry.graph.CreateTodoTaskRequest
 import com.xiang.ai.todoentry.graph.GraphClient
+import com.xiang.ai.todoentry.settings.AppSettings
 import com.xiang.ai.todoentry.settings.SettingsRepository
 import com.xiang.ai.todoentry.ui.theme.AiTodoEntryTheme
-import com.xiang.ai.todoentry.widget.TodayTasksWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 class WidgetAiEntryActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,44 +72,57 @@ class WidgetAiEntryActivity : ComponentActivity() {
             AiTodoEntryTheme {
                 WidgetAiEntryScreen(
                     onDismiss = { finish() },
+                    onParse = ::parseTasks,
                     onCreate = ::createTasks
                 )
             }
         }
     }
 
-    private suspend fun createTasks(input: String): String = withContext(Dispatchers.IO) {
+    private suspend fun parseTasks(input: String): WidgetParsedResult = withContext(Dispatchers.IO) {
+        val settingsRepository = SettingsRepository(applicationContext)
+        val parser = OpenAiTaskParser()
+        val apiKey = settingsRepository.getApiKey() ?: error("请先在 App 的“我的”里配置 API Key")
+        val settings = settingsRepository.settings.first()
+        val parsed = parser.parse(input, settings, apiKey).tasks.filter { it.title.isNotBlank() }
+        require(parsed.isNotEmpty()) { "AI 没有解析出可创建的任务" }
+        WidgetParsedResult(parsed, settings)
+    }
+
+    private suspend fun createTasks(tasks: List<ParsedTask>): String = withContext(Dispatchers.IO) {
         val settingsRepository = SettingsRepository(applicationContext)
         val authRepository = AuthRepository(applicationContext)
         val graphClient = GraphClient()
-        val parser = OpenAiTaskParser()
-        val apiKey = settingsRepository.getApiKey() ?: error("请先在 App 的“我的”里配置 API Key")
         val settings = settingsRepository.settings.first()
         val token = authRepository.acquireTokenSilent()
         val lists = graphClient.getLists(token)
         val listId = settings.defaultListId?.takeIf { id -> lists.any { it.id == id } }
             ?: lists.firstOrNull()?.id
             ?: error("没有可用的 Microsoft To Do 列表")
-        val parsed = parser.parse(input, settings, apiKey).tasks.filter { it.title.isNotBlank() }
-        require(parsed.isNotEmpty()) { "AI 没有解析出可创建的任务" }
-        parsed.forEach { task ->
+        tasks.forEach { task ->
             graphClient.createTask(token, listId, CreateTodoTaskRequest.from(task))
         }
-        TodayTasksWidgetProvider.refresh(applicationContext)
-        "已创建 ${parsed.size} 个任务"
+        "已创建 ${tasks.size} 个任务"
     }
 }
+
+private data class WidgetParsedResult(
+    val tasks: List<ParsedTask>,
+    val settings: AppSettings
+)
 
 @Composable
 private fun WidgetAiEntryScreen(
     onDismiss: () -> Unit,
-    onCreate: suspend (String) -> String
+    onParse: suspend (String) -> WidgetParsedResult,
+    onCreate: suspend (List<ParsedTask>) -> String
 ) {
     val context = LocalContext.current
     val keyboard = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
     var input by remember { mutableStateOf("") }
+    var parsedTasks by remember { mutableStateOf<List<ParsedTask>>(emptyList()) }
     var isBusy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
@@ -127,8 +148,8 @@ private fun WidgetAiEntryScreen(
             shadowElevation = 12.dp
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
@@ -143,12 +164,13 @@ private fun WidgetAiEntryScreen(
                         value = input,
                         onValueChange = {
                             input = it
+                            parsedTasks = emptyList()
                             message = null
                         },
                         modifier = Modifier
                             .weight(1f)
                             .focusRequester(focusRequester),
-                        placeholder = { Text("添加任务", fontSize = 24.sp, color = Color(0xFF7B7D85)) },
+                        placeholder = { Text("添加任务", fontSize = 22.sp, color = Color(0xFF7B7D85)) },
                         singleLine = true,
                         enabled = !isBusy,
                         colors = TextFieldDefaults.colors(
@@ -167,10 +189,18 @@ private fun WidgetAiEntryScreen(
                             message = null
                             scope.launch {
                                 runCatching {
-                                    message = onCreate(input.trim())
-                                    input = ""
-                                    keyboard?.hide()
-                                    onDismiss()
+                                    val result = onParse(input.trim())
+                                    if (result.settings.skipAiCreationConfirmation) {
+                                        message = onCreate(result.tasks)
+                                        input = ""
+                                        keyboard?.hide()
+                                        onDismiss()
+                                    } else {
+                                        parsedTasks = result.tasks
+                                        keyboard?.hide()
+                                        message = null
+                                        isBusy = false
+                                    }
                                 }.onFailure { throwable ->
                                     message = throwable.message ?: "创建失败"
                                     isBusy = false
@@ -198,14 +228,50 @@ private fun WidgetAiEntryScreen(
                     }
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(28.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    QuickOption("⌂", "任务")
-                    QuickOption("▣", "设置截止日期")
-                    QuickOption("♢", "提醒我")
+                if (parsedTasks.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("确认创建", color = Color(0xFF172033), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        parsedTasks.forEach { task ->
+                            ParsedTaskCard(task)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                enabled = !isBusy,
+                                onClick = {
+                                    parsedTasks = emptyList()
+                                    keyboard?.show()
+                                }
+                            ) {
+                                Text("继续编辑")
+                            }
+                            Button(
+                                enabled = !isBusy,
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                onClick = {
+                                    isBusy = true
+                                    message = null
+                                    scope.launch {
+                                        runCatching {
+                                            message = onCreate(parsedTasks)
+                                            input = ""
+                                            parsedTasks = emptyList()
+                                            onDismiss()
+                                        }.onFailure { throwable ->
+                                            message = throwable.message ?: "创建失败"
+                                            isBusy = false
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("确认创建", color = Color.White)
+                            }
+                        }
+                    }
                 }
 
                 message?.let {
@@ -222,9 +288,36 @@ private fun WidgetAiEntryScreen(
 }
 
 @Composable
-private fun QuickOption(icon: String, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(icon, color = Color(0xFF6D7078), fontSize = 30.sp)
-        Text(text, color = Color(0xFF6D7078), fontSize = 22.sp)
+private fun ParsedTaskCard(task: ParsedTask) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFF5F7FB), RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(task.title, color = Color(0xFF172033), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+        task.body?.takeIf { it.isNotBlank() }?.let {
+            Text(it, color = Color(0xFF6D7078), fontSize = 13.sp, maxLines = 2)
+        }
+        task.reminderDateTime.toWidgetDisplayDateTime()?.let {
+            Text("提醒 $it", color = Color(0xFF2563EB), fontSize = 13.sp)
+        } ?: task.dueDateTime.toWidgetDisplayDateTime()?.let {
+            Text("截止 $it", color = Color(0xFF2563EB), fontSize = 13.sp)
+        }
     }
+}
+
+private fun String?.toWidgetDisplayDateTime(): String? {
+    val raw = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val dateTime = runCatching { LocalDateTime.parse(raw) }.getOrNull() ?: return raw.take(16)
+    val today = LocalDate.now()
+    val dateText = when (dateTime.toLocalDate()) {
+        today -> "今天"
+        today.plusDays(1) -> "明天"
+        else -> dateTime.toLocalDate().format(DateTimeFormatter.ofPattern("M月d日"))
+    }
+    val time = dateTime.toLocalTime()
+    val hasTime = !(time.hour == 0 && time.minute == 0 && time.second == 0)
+    return if (hasTime) "$dateText ${dateTime.format(DateTimeFormatter.ofPattern("HH:mm"))}" else dateText
 }

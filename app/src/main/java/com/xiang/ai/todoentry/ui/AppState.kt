@@ -89,8 +89,8 @@ data class EditableTaskDetail(
                 body = task.body?.content.orEmpty(),
                 status = task.status,
                 importance = TaskImportance.from(task.importance),
-                dueDateTime = task.dueDateTime?.dateTime.orEmpty(),
-                reminderDateTime = task.reminderDateTime?.dateTime.orEmpty()
+                dueDateTime = task.dueDateTime?.toLocalInput().orEmpty(),
+                reminderDateTime = task.reminderDateTime?.toLocalInput().orEmpty()
             )
         }
     }

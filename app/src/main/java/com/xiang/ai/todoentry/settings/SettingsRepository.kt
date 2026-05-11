@@ -1,6 +1,7 @@
 package com.xiang.ai.todoentry.settings
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -31,7 +32,8 @@ class SettingsRepository(context: Context) {
         AppSettings(
             llmBaseUrl = preferences[Keys.LLM_BASE_URL] ?: "https://api.deepseek.com",
             llmModel = preferences[Keys.LLM_MODEL] ?: "deepseek-v4-flash",
-            defaultListId = preferences[Keys.DEFAULT_LIST_ID]
+            defaultListId = preferences[Keys.DEFAULT_LIST_ID],
+            skipAiCreationConfirmation = preferences[Keys.SKIP_AI_CONFIRMATION] ?: false
         )
     }
 
@@ -45,6 +47,7 @@ class SettingsRepository(context: Context) {
             } else {
                 preferences[Keys.DEFAULT_LIST_ID] = defaultListId
             }
+            preferences[Keys.SKIP_AI_CONFIRMATION] = settings.skipAiCreationConfirmation
         }
     }
 
@@ -62,6 +65,7 @@ class SettingsRepository(context: Context) {
         val LLM_BASE_URL = stringPreferencesKey("llm_base_url")
         val LLM_MODEL = stringPreferencesKey("llm_model")
         val DEFAULT_LIST_ID = stringPreferencesKey("default_list_id")
+        val SKIP_AI_CONFIRMATION = booleanPreferencesKey("skip_ai_confirmation")
     }
 
     private companion object {

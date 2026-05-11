@@ -5,6 +5,7 @@ import com.squareup.moshi.JsonClass
 import com.xiang.ai.todoentry.ai.ParsedTask
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 @JsonClass(generateAdapter = false)
 data class TodoListResponse(
@@ -39,7 +40,10 @@ data class UpdateTodoTaskRequest(
     val title: String? = null,
     val status: String? = null,
     val importance: String? = null,
-    val body: ItemBody? = null
+    val body: ItemBody? = null,
+    val dueDateTime: DateTimeTimeZone? = null,
+    val reminderDateTime: DateTimeTimeZone? = null,
+    val isReminderOn: Boolean? = null
 )
 
 @JsonClass(generateAdapter = false)
@@ -67,9 +71,13 @@ data class CreateTodoTaskRequest(
 
         private fun String.toGraphDate(zoneId: ZoneId): DateTimeTimeZone? {
             val parsed = runCatching { LocalDateTime.parse(this) }.getOrNull() ?: return null
+            val utcDateTime = parsed
+                .atZone(zoneId)
+                .withZoneSameInstant(ZoneOffset.UTC)
+                .toLocalDateTime()
             return DateTimeTimeZone(
-                dateTime = parsed.toString(),
-                timeZone = zoneId.id
+                dateTime = utcDateTime.toString(),
+                timeZone = "UTC"
             )
         }
     }
@@ -85,7 +93,31 @@ data class ItemBody(
 data class DateTimeTimeZone(
     val dateTime: String,
     val timeZone: String
-)
+) {
+    fun toLocalInput(): String {
+        val parsed = runCatching { LocalDateTime.parse(dateTime.substringBefore(".")) }.getOrNull()
+            ?: return dateTime
+        val sourceZone = if (timeZone.equals("UTC", ignoreCase = true)) ZoneOffset.UTC else ZoneId.systemDefault()
+        return parsed.atZone(sourceZone)
+            .withZoneSameInstant(ZoneId.systemDefault())
+            .toLocalDateTime()
+            .toString()
+    }
+
+    companion object {
+        fun fromLocalInput(value: String, zoneId: ZoneId = ZoneId.systemDefault()): DateTimeTimeZone? {
+            val parsed = runCatching { LocalDateTime.parse(value.trim()) }.getOrNull() ?: return null
+            val utcDateTime = parsed
+                .atZone(zoneId)
+                .withZoneSameInstant(ZoneOffset.UTC)
+                .toLocalDateTime()
+            return DateTimeTimeZone(
+                dateTime = utcDateTime.toString(),
+                timeZone = "UTC"
+            )
+        }
+    }
+}
 
 @JsonClass(generateAdapter = false)
 data class GraphErrorResponse(
